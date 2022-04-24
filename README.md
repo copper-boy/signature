@@ -3,15 +3,21 @@ ____
 ## Установка
 
 - Клонирование репозитория
-
   + **git clone https://github.com/DededGit/signature/tree/development**
   + **cd signature**
+    - Создание вирутального окружения
+      + python -m venv venv
+      - Активация 
+        - Linux
+          + source venv/bin/activate
+        - Windows
+          + venv\Scripts\activate.bat
     - Установка зависимостей
       + **pip install -r requirements.txt**
 
 ## Использование
 
-**python main.py**<br><br>
+**python digital_signature.py**<br><br>
 **Нужна почта @gmail.com, чтобы с неё можно было отправлять, на ней должны быть отключены
 все уровни защиты и разрешен вход с небезопасного устройства, чтобы можно было читать с почты письма
 нужно все как в пункте с 'отправлением', но IMAP должен быть включен, можете попробывать
