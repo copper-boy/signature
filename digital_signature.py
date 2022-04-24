@@ -303,7 +303,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
                 if file and len(digital_message):
                     with open(f'{self.keys_combo_box.currentText()}.pem', "rb") as key_file:
                         private_key = serialization.load_pem_private_key(key_file.read(), password=None)
-                        dir_name = 'temp/' + digital_message
+                        dir_name = f'temp/{digital_message}'
                         if os.path.exists(dir_name):
                             if QMessageBox.question(self, 'Question',
                                                     f'The directory {dir_name} is already exists, do you want delete this dir?') == \
@@ -405,13 +405,16 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         try:
             email = self.address_text.toPlainText()
             password = self.pass_text.toPlainText()
+            if not len(email) and not len(password):
+                return QMessageBox.critical(self, 'Error', 'Fields(login, password) can\'t be empty')
             if self.is_logged:
                 if QMessageBox.question(self, 'Question', 'Do you wan\'t re-authenticate?') == QMessageBox.Yes:
                     self.is_logged = False
                     self.mail = imap_tools.MailBox('imap.gmail.com').login(email, password)
+                    self.is_logged = True
                     QMessageBox.information(self, 'Information', 'Successfully authentication')
             else:
-                self.mail.login(email, password)
+                self.mail = imap_tools.MailBox('imap.gmail.com').login(email, password)
                 self.is_logged = True
                 QMessageBox.information(self, 'Information', 'Successfully authentication')
         except imap_tools.errors.MailboxLoginError:
