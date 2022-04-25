@@ -1,26 +1,26 @@
 import imaplib
-import mimetypes
-
-import cryptography.exceptions
 import imap_tools
-from PyQt5 import QtCore, QtGui, QtWidgets
+
+import mimetypes
+from email.mime.audio import MIMEAudio
+from email.mime.base import MIMEBase
+from email.mime.image import MIMEImage
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+
+import smtplib
+from email import encoders
+
+from PyQt5 import QtWidgets
 from PyQt5.QtCore import QRect, Qt, QMetaObject, QCoreApplication, QSize
 from PyQt5.QtWidgets import (QFileDialog, QGridLayout, QPushButton, QWidget, QTabWidget, QSplitter, QTextEdit, QMenuBar,
                              QLabel, QComboBox, QMessageBox, QStatusBar)
 
+
 import shutil
-
 import os
-import smtplib
-from email import encoders  # Импортируем энкодер
-from email.mime.base import MIMEBase  # Общий тип
-from email.mime.text import MIMEText  # Текст/HTML
-from email.mime.image import MIMEImage  # Изображения
-from email.mime.audio import MIMEAudio  # Аудио
-from email.mime.multipart import MIMEMultipart  # Многокомпонентный объект
 
-from imap_tools import MailBox, AND
-from cryptography.hazmat.primitives.serialization import load_der_public_key
+import cryptography.exceptions
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives import hashes
@@ -265,7 +265,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
 
     def on_key_generate_clicked(self):
         text = self.key_name_text.toPlainText()
-        if not len(text) or text == 'Ключ':
+        if not text or text == 'Ключ':
             return QMessageBox.critical(self, 'Error', 'Invalid key name value')
         if not os.path.exists(f'{text}.pem'):
             with open(f'{text}.pem', 'wb') as key_file:
@@ -297,32 +297,26 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
             password = self.password_text.toPlainText()
             addr_to = self.addr_to_text.toPlainText()
             digital_message = self.digital_signature_text.toPlainText()
-            if len(addr_from) and len(password) and len(
-                    addr_to) and self.keys_combo_box.currentText() != 'Ключ' and len(digital_message):
+            if addr_from and password and addr_to and self.keys_combo_box.currentText() != 'Ключ' and digital_message:
                 file, _ = QFileDialog.getOpenFileName(self, 'Open File', './')
-                if file and len(digital_message):
-                    with open(f'{self.keys_combo_box.currentText()}.pem', "rb") as key_file:
-                        private_key = serialization.load_pem_private_key(key_file.read(), password=None)
-                        dir_name = f'temp/{digital_message}'
-                        if os.path.exists(dir_name):
-                            if QMessageBox.question(self, 'Question',
-                                                    f'The directory {dir_name} is already exists, do you want delete this dir?') == \
-                                    QMessageBox.Yes:
-                                shutil.rmtree(dir_name)
+                with open(f'{self.keys_combo_box.currentText()}.pem', "rb") as key_file:
+                    private_key = serialization.load_pem_private_key(key_file.read(), password=None)
+                    dir_name = f'temp/{digital_message}'
+                    if os.path.exists(dir_name):
+                        if os.path.exists(f'temp/{digital_message}'):
+                            shutil.rmtree(dir_name)
                         os.makedirs(dir_name)
-                        with open(dir_name + f'/{digital_message}.sig', 'wb') as signature_file, open(
-                                dir_name + f'/{digital_message}.asc', 'wb') as public_key:
+                        with open(dir_name + f'/{digital_message}.sig', 'wb') as signature_file, open(dir_name + f'/{digital_message}.asc', 'wb') as public_key:
                             signature_file.write(private_key.sign(bytes(digital_message, 'utf-8'),
                                                                   padding.PSS(mgf=padding.MGF1(hashes.SHA256()),
-                                                                              salt_length=padding.PSS.MAX_LENGTH),
+                                                                  salt_length=padding.PSS.MAX_LENGTH),
                                                                   hashes.SHA256()))
 
-                            public_key.write(
-                                private_key.public_key().public_bytes(encoding=serialization.Encoding.OpenSSH,
-                                                                      format=serialization.PublicFormat.OpenSSH))
+                            public_key.write(private_key.public_key().public_bytes(encoding=serialization.Encoding.OpenSSH,
+                                                                                   format=serialization.PublicFormat.OpenSSH))
 
                     files = [file, f'temp/{digital_message}']
-                    file_name = file.split('/')[len(file.split('/')) - 1]
+                    file_name = file.split('/')[-1]
                     self.__send_email(addr_from, password, addr_to,
                                       f'digital signature {file_name}, message:{digital_message}', '', files)
                     QMessageBox.information(self, 'Information', 'Successfully sent')
@@ -336,8 +330,6 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
             QMessageBox.critical(self, 'Error', f'Auth error with email address \'{addr_from}\'')
         except smtplib.SMTPRecipientsRefused:
             QMessageBox.critical(self, 'Error', f'Address \'{addr_to}\' invalid email address.')
-        if os.path.exists(f'temp/{digital_message}'):
-            shutil.rmtree(f'temp/{digital_message}')
 
     def on_check_signature_clicked(self):
         if not self.is_logged:
@@ -390,7 +382,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
                     message = msg.subject.split(',')[0].split(' ')[2]
                     for attachment in msg.attachments:
                         if message == attachment.filename:
-                            file_type = attachment.filename.split('.')[len(attachment.filename.split('.')) - 1]
+                            file_type = attachment.filename.split('.')[-1]
                             file, check = QFileDialog.getSaveFileName(self, f'Save file', '', f'All files (*);;'
                                                                                               f'.{file_type}')
                             if check:
@@ -405,7 +397,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         try:
             email = self.address_text.toPlainText()
             password = self.pass_text.toPlainText()
-            if not len(email) and not len(password):
+            if not email and not password:
                 return QMessageBox.critical(self, 'Error', 'Fields(login, password) can\'t be empty')
             if self.is_logged:
                 if QMessageBox.question(self, 'Question', 'Do you wan\'t re-authenticate?') == QMessageBox.Yes:
