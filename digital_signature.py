@@ -267,107 +267,106 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         text = self.key_name_text.toPlainText()
         if not text or text == 'Ключ':
             return QMessageBox.critical(self, 'Error', 'Invalid key name value')
-        if not os.path.exists(f'{text}.pem'):
-            with open(f'{text}.pem', 'wb') as key_file:
-                key_file.write(rsa.generate_private_key(public_exponent=65537, key_size=2048).private_bytes(
-                    encoding=serialization.Encoding.PEM,
-                    format=serialization.PrivateFormat.TraditionalOpenSSL,
-                    encryption_algorithm=serialization.NoEncryption()))
+        if os.path.exists(f'{text}.pem'):
+            return QMessageBox.critical(self, 'Error', 'The key already exists, you need to remove it first');
+        with open(f'{text}.pem', 'wb') as key_file:
+            key_file.write(rsa.generate_private_key(public_exponent=65537, key_size=2048).private_bytes(
+                encoding=serialization.Encoding.PEM,
+                format=serialization.PrivateFormat.TraditionalOpenSSL,
+                encryption_algorithm=serialization.NoEncryption()))
             QMessageBox.information(self, 'Information', 'Key created successfully')
-        else:
-            QMessageBox.critical(self, 'Error', 'The key already exists, you need to remove it first')
 
     def on_key_delete_clicked(self):
         current_text = self.keys_combo_box.currentText()
-        if current_text != 'Ключ':
-            if os.path.exists(f'{current_text}.pem'):
-                os.remove(f'{current_text}.pem')
-            self.keys_combo_box.removeItem(self.keys_combo_box.findText(current_text))
-        else:
-            QMessageBox.critical(self, 'Error', 'The key is the notation')
+        if current_text == 'Ключ':
+            return QMessageBox.critical(self, 'Error', 'The key is the notation')
+        if os.path.exists(f'{current_text}.pem'):
+            os.remove(f'{current_text}.pem')
+        self.keys_combo_box.removeItem(self.keys_combo_box.findText(current_text))
 
     def on_keys_update_clicked(self):
         self.keys_combo_box.clear()
-        self.keys_combo_box.addItems(
-            ['Ключ'] + [file.split('.')[0] for file in os.listdir() if os.path.isfile(file) and file.endswith('.pem')])
+        self.keys_combo_box.addItems(['Ключ'] + [file.split('.')[0] for file in os.listdir() if os.path.isfile(file) and file.endswith('.pem')])
 
     def on_send_clicked(self):
+        addr_from = self.addr_from_text.toPlainText()
+        password = self.password_text.toPlainText()
+        addr_to = self.addr_to_text.toPlainText()
+        digital_message = self.digital_signature_text.toPlainText()
+
+        if self.keys_combo_box.currentText == 'Ключ':
+            return QMessageBox.critical(self, 'Error', 'Select key')
+
         try:
-            addr_from = self.addr_from_text.toPlainText()
-            password = self.password_text.toPlainText()
-            addr_to = self.addr_to_text.toPlainText()
-            digital_message = self.digital_signature_text.toPlainText()
-            if addr_from and password and addr_to and self.keys_combo_box.currentText() != 'Ключ' and digital_message:
-                file, _ = QFileDialog.getOpenFileName(self, 'Open File', './')
-                with open(f'{self.keys_combo_box.currentText()}.pem', "rb") as key_file:
-                    private_key = serialization.load_pem_private_key(key_file.read(), password=None)
-                    dir_name = f'temp/{digital_message}'
-                    if os.path.exists(dir_name):
-                        if os.path.exists(f'temp/{digital_message}'):
-                            shutil.rmtree(dir_name)
-                        os.makedirs(dir_name)
-                        with open(dir_name + f'/{digital_message}.sig', 'wb') as signature_file, open(dir_name + f'/{digital_message}.asc', 'wb') as public_key:
-                            signature_file.write(private_key.sign(bytes(digital_message, 'utf-8'),
-                                                                  padding.PSS(mgf=padding.MGF1(hashes.SHA256()),
-                                                                  salt_length=padding.PSS.MAX_LENGTH),
-                                                                  hashes.SHA256()))
+            self.__is_fields_empty([addr_from, password, addr_to, digital_message])
+        except ValueError as v:
+            return QMessageBox.critical(self, 'Error', f'{v.args[0]}')
 
-                            public_key.write(private_key.public_key().public_bytes(encoding=serialization.Encoding.OpenSSH,
-                                                                                   format=serialization.PublicFormat.OpenSSH))
+        private_key: rsa.RSAPrivateKey
+        with open(f'{self.keys_combo_box.currentText()}.pem', "rb") as key_file:
+            try:
+                private_key = serialization.load_pem_private_key(key_file.read(), password=None)
+            except:
+                return QMessageBox.critical(self, 'Error', 'Unable to load private key')
 
-                    files = [file, f'temp/{digital_message}']
-                    file_name = file.split('/')[-1]
-                    self.__send_email(addr_from, password, addr_to,
-                                      f'digital signature {file_name}, message:{digital_message}', '', files)
-                    QMessageBox.information(self, 'Information', 'Successfully sent')
-            else:
-                if self.keys_combo_box.currentText() == 'Ключ':
-                    QMessageBox.critical(self, 'Error', 'Select key')
-                else:
-                    QMessageBox.critical(self, 'Error',
-                                         'Fields(address from, password, address to, message) cann\'t be empty')
-        except smtplib.SMTPAuthenticationError:
-            QMessageBox.critical(self, 'Error', f'Auth error with email address \'{addr_from}\'')
-        except smtplib.SMTPRecipientsRefused:
-            QMessageBox.critical(self, 'Error', f'Address \'{addr_to}\' invalid email address.')
+        file, check  = QFileDialog.getOpenFileName(self, 'Open File', './')
+        if not check:
+            return QMessageBox.critical(self, 'Error', 'You need to select any file')
+
+        dir_name = f'temp/{digital_message}'
+        if os.path.exists(dir_name):
+                shutil.rmtree(dir_name)
+        os.makedirs(dir_name)
+        with open(dir_name + f'/{digital_message}.sig', 'wb') as signature_file, open(dir_name + f'/{digital_message}.asc', 'wb') as public_key:
+            signature_file.write(private_key.sign(bytes(digital_message, 'utf-8'),
+                                                  padding.PSS(mgf=padding.MGF1(hashes.SHA256()), salt_length=padding.PSS.MAX_LENGTH),
+                                                  hashes.SHA256()))
+
+            public_key.write(private_key.public_key().public_bytes(encoding=serialization.Encoding.OpenSSH, format=serialization.PublicFormat.OpenSSH))
+            file_name = file.split('/')[-1]
+            try:
+                self.__send_email(addr_from, password, addr_to,
+                                  f'digital signature {file_name}, message:{digital_message}', '', [file, f'temp/{digital_message}'])
+            except smtplib.SMTPAuthenticationError:
+                return QMessageBox.critical(self, 'Error', f'Auth error with email address \'{addr_from}\'')
+            except smtplib.SMTPRecipientsRefused:
+                    return QMessageBox.critical(self, 'Error', f'Address \'{addr_to}\' invalid email address.')
+            return QMessageBox.information(self, 'Information', 'Successfully sent')
 
     def on_check_signature_clicked(self):
         if not self.is_logged:
             return QMessageBox.critical(self, 'Error', 'You need to complete authentication')
         item = self.mails_combo_box.currentText()
-        if item != 'Выберите письмо':
-            for msg in self.mail.fetch():
-                if msg.subject == item:
-                    try:
-                        signature: bytes
-                        public_key: rsa.RSAPublicKey
-                        message = msg.subject.split(',')[1].split(':')[1]
-                        for attachment in msg.attachments:
-                            if f'{message}.sig' == attachment.filename:
-                                signature = bytes(attachment.payload)
-                            elif f'{message}.asc' == attachment.filename:
-                                public_key = serialization.load_ssh_public_key(attachment.payload)
-                        public_key.verify(signature,
-                                          str.encode(message),
-                                          padding.PSS(mgf=padding.MGF1(hashes.SHA256()),
-                                                      salt_length=padding.PSS.MAX_LENGTH),
-                                          hashes.SHA256())
-                        return QMessageBox.information(self, 'Information', f'Valid digital signature from {msg.from_}')
-                    except cryptography.exceptions.InvalidSignature:
-                        return QMessageBox.critical(self, 'Error', 'Not a valid digital signature')
-                    except cryptography.exceptions.UnsupportedAlgorithm:
-                        return QMessageBox.critical(self, 'Error', 'Unsupported key type algorith, needed openssh')
-
-            return QMessageBox.critical(self, 'Error', 'The current message is not exists, update mails list')
-        else:
+        if item == 'Выберите письмо':
             return QMessageBox.critical(self, 'Error', 'The current item is the notation')
+        for msg in self.mail.fetch():
+            if msg.subject == item:
+                signature: bytes
+                public_key: rsa.RSAPublicKey
+                message = msg.subject.split(',')[1].split(':')[1]
+                for attachment in msg.attachments:
+                    if f'{message}.sig' == attachment.filename:
+                        signature = bytes(attachment.payload)
+                    elif f'{message}.asc' == attachment.filename:
+                        public_key = serialization.load_ssh_public_key(attachment.payload)
+                try:
+                    public_key.verify(signature,
+                                      str.encode(message),
+                                      padding.PSS(mgf=padding.MGF1(hashes.SHA256()), salt_length=padding.PSS.MAX_LENGTH),
+                                      hashes.SHA256())
+                except cryptography.exceptions.InvalidSignature:
+                    return QMessageBox.critical(self, 'Error', 'Not a valid digital signature')
+                except cryptography.exceptions.UnsupportedAlgorithm:
+                    return QMessageBox.critical(self, 'Error', 'Unsupported key type algorith, needed openssh')
+
+                return QMessageBox.information(self, 'Information', f'Valid digital signature from {msg.from_}')
+            return QMessageBox.critical(self, 'Error', 'The current message is not exists, update mails list')
 
     def on_update_emails_clicked(self):
         self.mails_combo_box.clear()
         self.mails_combo_box.addItem('Выберите письмо')
         if self.is_logged:
-            self.mails_combo_box.addItems(
-                [subject.subject for subject in self.mail.fetch() if subject.subject.startswith('digital signature')])
+            self.mails_combo_box.addItems([subject.subject for subject in self.mail.fetch() if subject.subject.startswith('digital signature')])
             QMessageBox.information(self, 'Information', 'Mails list updated')
         else:
             QMessageBox.critical(self, 'Error', 'You need to complete authentication')
@@ -376,45 +375,52 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         if not self.is_logged:
             return QMessageBox.critical(self, 'Error', 'You need to complete authentication')
         item = self.mails_combo_box.currentText()
-        if item != 'Выберите письмо':
-            for msg in self.mail.fetch():
-                if msg.subject == item:
-                    message = msg.subject.split(',')[0].split(' ')[2]
-                    for attachment in msg.attachments:
-                        if message == attachment.filename:
-                            file_type = attachment.filename.split('.')[-1]
-                            file, check = QFileDialog.getSaveFileName(self, f'Save file', '', f'All files (*);;'
+        if item == 'Выберите письмо':
+            return QMessageBox.critical(self, 'Error', 'The current item is the notation')
+        for msg in self.mail.fetch():
+            if msg.subject == item:
+                message = msg.subject.split(',')[0].split(' ')[2]
+                for attachment in msg.attachments:
+                    if message == attachment.filename:
+                        file_type = attachment.filename.split('.')[-1]
+                        file, check = QFileDialog.getSaveFileName(self, f'Save file', '', f'All files (*);;'
                                                                                               f'.{file_type}')
-                            if check:
-                                with open(file, 'wb') as download:
-                                    download.write(attachment.payload)
-                            return QMessageBox.information(self, 'Information', f'Successfully downloading file')
+                        if not check:
+                            return QMessageBox.critical(self, 'Error', 'Please select any file')
+                        with open(file, 'wb') as download:
+                            download.write(attachment.payload)
+                        return QMessageBox.information(self, 'Information', f'Successfully downloading file')
             QMessageBox.critical(self, 'Error', 'The current message is not exists, update mails list')
-        else:
-            QMessageBox.critical(self, 'Error', 'The current item is the notation')
 
     def on_auth_clicked(self):
+        email = self.address_text.toPlainText()
+        password = self.pass_text.toPlainText()
         try:
-            email = self.address_text.toPlainText()
-            password = self.pass_text.toPlainText()
-            if not email and not password:
-                return QMessageBox.critical(self, 'Error', 'Fields(login, password) can\'t be empty')
-            if self.is_logged:
-                if QMessageBox.question(self, 'Question', 'Do you wan\'t re-authenticate?') == QMessageBox.Yes:
-                    self.is_logged = False
-                    self.mail = imap_tools.MailBox('imap.gmail.com').login(email, password)
-                    self.is_logged = True
-                    QMessageBox.information(self, 'Information', 'Successfully authentication')
-            else:
+            self.__is_fields_empty([email, password])
+        except ValueError as v:
+            return QMessageBox.critical(self, 'Error', f'{v.args[0]}')
+
+        if self.__email_logout() is True:
+            try:
                 self.mail = imap_tools.MailBox('imap.gmail.com').login(email, password)
-                self.is_logged = True
-                QMessageBox.information(self, 'Information', 'Successfully authentication')
-        except imap_tools.errors.MailboxLoginError:
-            QMessageBox.critical(self, 'Error', 'Unsuccessful authentication, it may be the wrong address or password,'
-                                                ' or IMAP is disabled in the settings, '
-                                                'or insecure applications are allowed')
-        except imaplib.IMAP4.error:
-            QMessageBox.critical(self, 'Error', 'Can\'t complete authentication')
+            except imap_tools.errors.MailboxLoginError:
+                QMessageBox.critical(self, 'Error',
+                                     'Unsuccessful authentication, it may be the wrong address or password,'
+                                     ' or IMAP is disabled in the settings, '
+                                     'or insecure applications are allowed')
+            except imaplib.IMAP4.error:
+                QMessageBox.critical(self, 'Error', 'Can\'t complete authentication')
+            self.is_logged = True
+            QMessageBox.information(self, 'Information', 'Successfully authentication')
+
+    def __is_fields_empty(self, fields: list[str]):
+        if len([i for i in fields if bool(i) is False]) > 0:
+            raise ValueError('Fields can\'t be empty')
+
+    def __email_logout(self):
+        if self.is_logged and QMessageBox.question(self, 'Question', 'Do you wan\'t re-authenticate?') == QMessageBox.Yes:
+            self.is_logged = False
+        return not self.is_logged
 
     def __send_email(self, addr_from, password, addr_to, msg_subj, msg_text, files):
         msg = MIMEMultipart()  # Создаем сообщение
