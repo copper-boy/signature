@@ -15,7 +15,7 @@ import imap_tools
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
 from PyQt5 import QtWidgets
-from PyQt5.QtWidgets import (QFileDialog, QMessageBox)
+from PyQt5.QtWidgets import QFileDialog, QMessageBox
 
 from ui_mainwindow import Ui_MainWindow
 
@@ -86,8 +86,8 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
                 files = [file, f'temp/{digital_message}']
                 file_name = file.split('/')[len(file.split('/')) - 1]
                 try:
-                    self.__send_email(addr_from, password, addr_to,
-                                      f'digital signature {file_name}, message:{digital_message}', '', files)
+                    MainWindow.__send_email(addr_from, password, addr_to,
+                                            f'digital signature {file_name}, message:{digital_message}', '', files)
                 except smtplib.SMTPAuthenticationError:
                     return QMessageBox.critical(self, 'Error', f'Auth error with email address \'{addr_from}\'')
                 except smtplib.SMTPRecipientsRefused:
@@ -201,7 +201,8 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
             self.is_logged = False
         return not self.is_logged
 
-    def __send_email(self, addr_from, password, addr_to, msg_subj, msg_text, files):
+    @staticmethod
+    def __send_email(addr_from, password, addr_to, msg_subj, msg_text, files):
         msg = MIMEMultipart()
         msg['From'] = addr_from
         msg['To'] = addr_to
@@ -210,7 +211,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         body = msg_text
         msg.attach(MIMEText(body, 'plain'))
 
-        self.__process_attachement(msg, files)
+        MainWindow.__process_attachement(msg, files)
         server = smtplib.SMTP('smtp.gmail.com', 587)
         server.ehlo()
         server.starttls()
@@ -218,16 +219,18 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         server.send_message(msg)
         server.quit()
 
-    def __process_attachement(self, msg, files):
+    @staticmethod
+    def __process_attachement(msg, files):
         for f in files:
             if os.path.isfile(f):
-                self.__attach_file(msg, f)
+                MainWindow.__attach_file(msg, f)
             elif os.path.exists(f):
-                dir = os.listdir(f)
-                for file in dir:
-                    self.__attach_file(msg, f + "/" + file)
+                d = os.listdir(f)
+                for file in d:
+                    MainWindow.__attach_file(msg, f + "/" + file)
 
-    def __attach_file(self, msg, filepath):
+    @staticmethod
+    def __attach_file(msg, filepath):
         filename = os.path.basename(filepath)
         ctype, encoding = mimetypes.guess_type(filepath)
         if ctype is None or encoding is not None:
@@ -248,8 +251,8 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
                     file = MIMEBase(maintype, subtype)
                     file.set_payload(fp.read())
                     encoders.encode_base64(file)
-        file.add_header('Content-Disposition', 'attachment', filename=filename)  # Добавляем заголовки
-        msg.attach(file)  # Присоединяем файл к сообщению
+        file.add_header('Content-Disposition', 'attachment', filename=filename)
+        msg.attach(file)
 
 
 if __name__ == "__main__":
