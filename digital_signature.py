@@ -17,6 +17,7 @@ from cryptography.hazmat.primitives.asymmetric import padding, rsa
 from PyQt5 import QtWidgets
 from PyQt5.QtWidgets import QFileDialog, QMessageBox
 
+
 from ui_mainwindow import Ui_MainWindow
 
 
@@ -98,41 +99,24 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         item = self.mails_combo_box.currentText()
         if item == 'Выберите письмо':
             return QMessageBox.critical(self, 'Error', 'The current item is the notation')
-
+        
         for msg in self.mail.fetch():
             if msg.subject == item:
-                signature: bytes
-                public_key: rsa.RSAPublicKey
-                message = msg.subject.split(',')[1].split(':')[1]
+                signature = bytes()
+                public_key = rsa.RSAPublicKey
+                message = msg.subject.split(',')[1].split(':')[1] # get message, example: digital message file.file, message:test
                 for attachment in msg.attachments:
-                    match attachment.filename.split('.')[1]:
+                    match attachment.filename.split('.')[1]: # get file type
                         case 'sig':
-                            try:
-                                match len(attachment.payload):
-                                    case 0:
-                                        raise ValueError('Empty signature')
-                                    case _:
-                                        signature = bytes(attachment.payload)
-                            except ValueError as v:
-                                return QMessageBox.critical(self, 'Error', v.args[0])
+                            if not MainWindow.__load_signature(attachment, signature):
+                                return QMessageBox.critical(self, 'Error', 'Can\'t load signature')
                         case 'asc':
-                            try:
-                                public_key = serialization.load_ssh_public_key(attachment.payload)
-                            except (Exception, ValueError, TypeError):
-                                return QMessageBox.critical(self, 'Error', 'Invalid key format')
-                try:
-                    public_key.verify(signature,
-                                      str.encode(message),
-                                      padding.PSS(mgf=padding.MGF1(hashes.SHA256()),
-                                                  salt_length=padding.PSS.MAX_LENGTH),
-                                      hashes.SHA256())
-                except cryptography.exceptions.InvalidSignature:
-                    return QMessageBox.critical(self, 'Error', 'Not a valid digital signature')
-                except cryptography.exceptions.UnsupportedAlgorithm:
-                    return QMessageBox.critical(self, 'Error', 'Unsupported key type algorith, needed openssh')
-                except ValueError:
-                    return QMessageBox.critical(self, 'Error', 'Invalid line format')
-                return QMessageBox.information(self, 'Information', f'Valid digital signature from {msg.from_}')
+                            if not MainWindow.__load_public_key(attachment, public_key):
+                                return QMessageBox.critical(self, 'Error', 'Can\'t load public key')
+                if MainWindow.__verify_signature(signature, public_key, message):
+                    QMessageBox.information(self, 'Information', f'Valid digital signature from {msg.from_}')
+                else:
+                    QMessageBox.critical(self, 'Error', 'Can\'t verify signature')
 
     def on_update_emails_clicked(self):
         self.mails_combo_box.clear()
@@ -181,6 +165,38 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
                 return QMessageBox.critical(self, 'Error', 'Can\'t complete authentication')
             self.is_logged = True
             QMessageBox.information(self, 'Information', 'Successfully authentication')
+
+    @staticmethod
+    def __load_public_key(attachment, public_key: rsa.RSAPublicKey):
+        try:
+            public_key = serialization.load_ssh_public_key(attachment.payload)
+        except (Exception, ValueError, TypeError):
+            return False
+        return True
+
+    @staticmethod
+    def __load_signature(attachment, signature: bytes):
+        try:
+            match len(attachment.payload):
+                case 0:
+                    raise ValueError('Empty signature')
+                case _:
+                    signature = bytes(attachment.payload)
+        except ValueError:
+            return False
+        return True
+
+    @staticmethod
+    def __verify_signature(signature, public_key, message):
+        try:
+            public_key.verify(self=public_key,
+                              signature=signature,
+                              data=str.encode(message),
+                              padding=padding.PSS(mgf=padding.MGF1(hashes.SHA256()), salt_length=padding.PSS.MAX_LENGTH),
+                              algorithm=hashes.SHA256())
+        except (cryptography.exceptions.InvalidSignature, cryptography.exceptions.UnsupportedAlgorithm, ValueError):
+            return False
+        return True
 
     @staticmethod
     def __is_fields_empty(fields: list[str]):
