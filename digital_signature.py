@@ -90,7 +90,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
                 except smtplib.SMTPRecipientsRefused:
                     return QMessageBox.critical(self, 'Error', f'Address \'{addr_to}\' invalid email address.')
 
-                QMessageBox.information(self, 'Information', 'Successfully sent')
+                return QMessageBox.information(self, 'Information', 'Successfully sent')
 
     def on_check_signature_clicked(self):
         if not self.is_logged:
@@ -133,7 +133,6 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
                 except ValueError:
                     return QMessageBox.critical(self, 'Error', 'Invalid line format')
                 return QMessageBox.information(self, 'Information', f'Valid digital signature from {msg.from_}')
-        return QMessageBox.critical(self, 'Error', 'The current message is not exists, update mails list')
 
     def on_update_emails_clicked(self):
         self.mails_combo_box.clear()
@@ -164,7 +163,6 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
                         with open(file, 'wb') as download:
                             download.write(attachment.payload)
                         return QMessageBox.information(self, 'Information', 'Successfully downloading file')
-        return QMessageBox.critical(self, 'Error', 'The current message is not exists, update mails list')
 
     def on_auth_clicked(self):
         email = self.address_text.toPlainText()
