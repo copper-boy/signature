@@ -61,10 +61,8 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         password = self.password_text.toPlainText()
         addr_to = self.addr_to_text.toPlainText()
         digital_message = self.digital_signature_text.toPlainText()
-        try:
-            MainWindow.__is_fields_empty([addr_from, password, addr_to, digital_message])  # if okay, no except
-        except ValueError as v:
-            return QMessageBox.critical(self, 'Error', v.args[0])
+        if MainWindow.__is_fields_empty([addr_from, password, addr_to, digital_message]):
+            return QMessageBox.critical(self, 'Error', 'Fields can\'t be empty')
         file, check = QFileDialog.getOpenFileName(self, 'Open File', './')
         if check:
             with open(f'{self.keys_combo_box.currentText()}.pem', "rb") as key_file:
@@ -171,11 +169,8 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
     def on_auth_clicked(self):
         email = self.address_text.toPlainText()
         password = self.pass_text.toPlainText()
-        try:
-            MainWindow.__is_fields_empty([email, password])
-        except ValueError as v:
-            return QMessageBox.critical(self, 'Error', f'{v.args[0]}')
-
+        if MainWindow.__is_fields_empty([email, password]):
+            return QMessageBox.critical(self, 'Error', 'Fields can\'t be empty')
         if self.__email_logout():
             try:
                 self.mail = imap_tools.MailBox('imap.gmail.com').login(email, password)
@@ -191,8 +186,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
 
     @staticmethod
     def __is_fields_empty(fields: list[str]):
-        if len([i for i in fields if not i]) > 0:
-            raise ValueError('Fields can\'t be empty')
+        return True if len([i for i in fields if not i]) > 0 else False
 
     def __email_logout(self):
         if self.is_logged and QMessageBox.question(self, 'Question',
