@@ -73,11 +73,10 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
                 if os.path.exists(dir_name):
                     shutil.rmtree(dir_name)
                 os.makedirs(dir_name)
-                with open(dir_name + f'/{digital_message}.sig', 'wb') as signature_file, open(
-                        dir_name + f'/{digital_message}.asc', 'wb') as public_key:
+                with open(dir_name + f'/{digital_message}.sig', 'wb') as signature_file, \
+                     open(dir_name + f'/{digital_message}.asc', 'wb') as public_key:
                     signature_file.write(private_key.sign(bytes(digital_message, 'utf-8'),
-                                                          padding.PSS(mgf=padding.MGF1(hashes.SHA256()),
-                                                                      salt_length=padding.PSS.MAX_LENGTH),
+                                                          padding.PSS(mgf=padding.MGF1(hashes.SHA256()), salt_length=padding.PSS.MAX_LENGTH),
                                                           hashes.SHA256()))
 
                     public_key.write(private_key.public_key().public_bytes(encoding=serialization.Encoding.OpenSSH,
