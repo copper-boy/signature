@@ -3,7 +3,7 @@ ____
 ## Установка
 
 - Клонирование репозитория
-  + **git clone https://github.com/DededGit/signature/tree/development**
+  + **git clone https://github.com/DededGit/signature**
   + **cd signature**
     - Создание вирутального окружения
       + python -m venv venv
