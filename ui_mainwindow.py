@@ -66,11 +66,6 @@ class Ui_MainWindow(object):
 
         self.send_grid_layout.addWidget(self.password, 5, 1, 1, 1)
 
-        self.digital_signature_text = QTextEdit(self.widget)
-        self.digital_signature_text.setObjectName(u"digital_signature_text")
-
-        self.send_grid_layout.addWidget(self.digital_signature_text, 1, 0, 1, 3)
-
         self.update_keys_button = QPushButton(self.widget)
         self.update_keys_button.setObjectName(u"update_keys_button")
 
@@ -85,11 +80,6 @@ class Ui_MainWindow(object):
         self.addr_to_text.setObjectName(u"addr_to_text")
 
         self.send_grid_layout.addWidget(self.addr_to_text, 6, 2, 1, 1)
-
-        self.digital_signature_label = QLabel(self.widget)
-        self.digital_signature_label.setObjectName(u"digital_signature_label")
-
-        self.send_grid_layout.addWidget(self.digital_signature_label, 0, 0, 1, 1)
 
         self.key_name_text = QTextEdit(self.widget)
         self.key_name_text.setObjectName(u"key_name_text")
@@ -194,9 +184,6 @@ class Ui_MainWindow(object):
         self.update_keys_button.setText(QCoreApplication.translate("MainWindow",
                                                                    u"\u041e\u0431\u043d\u043e\u0432\u0438\u0442\u044c \u0441\u043f\u0438\u0441\u043e\u043a \u043a\u043b\u044e\u0447\u0435\u0439",
                                                                    None))
-        self.digital_signature_label.setText(QCoreApplication.translate("MainWindow",
-                                                                        u"\u0421\u043e\u043e\u0431\u0449\u0435\u043d\u0438\u0435 \u0432 \u042d\u0426\u041f",
-                                                                        None))
         self.generate_key_button.setText(QCoreApplication.translate("MainWindow",
                                                                     u"\u0421\u0433\u0435\u043d\u0438\u0440\u0438\u0440\u043e\u0432\u0430\u0442\u044c \u043a\u043b\u044e\u0447",
                                                                     None))

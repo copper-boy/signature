@@ -61,31 +61,30 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         addr_from = self.addr_from_text.toPlainText()
         password = self.password_text.toPlainText()
         addr_to = self.addr_to_text.toPlainText()
-        digital_message = self.digital_signature_text.toPlainText()
-        if MainWindow.__is_fields_empty([addr_from, password, addr_to, digital_message]):
+        if MainWindow.__is_fields_empty([addr_from, password, addr_to]):
             return QMessageBox.critical(self, 'Error', 'Fields can\'t be empty')
         file, check = QFileDialog.getOpenFileName(self, 'Open File', './')
         if check:
             with open(f'{self.keys_combo_box.currentText()}.pem', "rb") as key_file:
                 private_key = serialization.load_pem_private_key(key_file.read(), password=None)
-                dir_name = 'temp/' + digital_message
+                dir_name = 'temp/' + file.split("/")[-1].split(".")[0]
                 if os.path.exists(dir_name):
                     shutil.rmtree(dir_name)
                 os.makedirs(dir_name)
-                with open(dir_name + f'/{digital_message}.sig', 'wb') as signature_file, \
-                     open(dir_name + f'/{digital_message}.asc', 'wb') as public_key:
-                    signature_file.write(private_key.sign(bytes(digital_message, 'utf-8'),
+                with open(os.path.join(dir_name, f'{file.split("/")[-1]}.sig'), 'wb') as signature_file, \
+                     open(os.path.join(dir_name, f'{file.split("/")[-1]}.asc'), 'wb') as public_key:
+                    signature_file.write(private_key.sign(bytes(open(file, 'rb').read().decode('utf-8'), 'utf-8'),
                                                           padding.PSS(mgf=padding.MGF1(hashes.SHA256()), salt_length=padding.PSS.MAX_LENGTH),
                                                           hashes.SHA256()))
 
                     public_key.write(private_key.public_key().public_bytes(encoding=serialization.Encoding.OpenSSH,
                                                                            format=serialization.PublicFormat.OpenSSH))
 
-                files = [file, f'temp/{digital_message}']
-                file_name = file.split('/')[len(file.split('/')) - 1]
+                files = [file, f'temp/{file.split("/")[-1].split(".")[0]}']
+                file_name = file.split('/')[-1]
                 try:
                     MainWindow.__send_email(addr_from, password, addr_to,
-                                            f'digital signature {file_name}, message:{digital_message}', '', files)
+                                            f'digital signature {file_name}', '', files)
                 except smtplib.SMTPAuthenticationError:
                     return QMessageBox.critical(self, 'Error', f'Auth error with email address \'{addr_from}\'')
                 except smtplib.SMTPRecipientsRefused:
@@ -102,21 +101,27 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         
         for msg in self.mail.fetch():
             if msg.subject == item:
-                signature = bytes()
                 public_key = rsa.RSAPublicKey
-                message = msg.subject.split(',')[1].split(':')[1] # get message, example: digital message file.file, message:test
                 for attachment in msg.attachments:
-                    match attachment.filename.split('.')[1]: # get file type
+                    filename = attachment.filename.split('.')[-1]
+                    match filename:
                         case 'sig':
-                            if not MainWindow.__load_signature(attachment, signature):
+                            signature: bytes = MainWindow.__load_signature(attachment)
+                            if not signature:
                                 return QMessageBox.critical(self, 'Error', 'Can\'t load signature')
                         case 'asc':
-                            if not MainWindow.__load_public_key(attachment, public_key):
+                            public_key: rsa.RSAPublicKey = MainWindow.__load_public_key(attachment)
+                            if not public_key.public_numbers():
                                 return QMessageBox.critical(self, 'Error', 'Can\'t load public key')
-                if MainWindow.__verify_signature(signature, public_key, message):
-                    QMessageBox.information(self, 'Information', f'Valid digital signature from {msg.from_}')
-                else:
-                    QMessageBox.critical(self, 'Error', 'Can\'t verify signature')
+                        case _:
+                            message = bytes(attachment.payload)
+                try:
+                    if MainWindow.__verify_signature(signature, public_key, message):
+                        QMessageBox.information(self, 'Information', f'Valid digital signature from {msg.from_}')
+                    else:
+                        QMessageBox.critical(self, 'Error', 'Invalid digital signature')
+                except UnboundLocalError:
+                    return QMessageBox.critical(self, 'Error', 'Not enough attachment messages')
 
     def on_update_emails_clicked(self):
         self.mails_combo_box.clear()
@@ -167,15 +172,19 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
             QMessageBox.information(self, 'Information', 'Successfully authentication')
 
     @staticmethod
-    def __load_public_key(attachment, public_key: rsa.RSAPublicKey):
+    def __load_public_key(attachment):
         try:
-            public_key = serialization.load_ssh_public_key(attachment.payload)
+            match len(attachment.payload):
+                case 0:
+                    raise ValueError('Empty signature')
+                case _:
+                    public_key = serialization.load_ssh_public_key(attachment.payload)
         except (Exception, ValueError, TypeError):
-            return False
-        return True
+            return rsa.RSAPublicKey()
+        return public_key
 
     @staticmethod
-    def __load_signature(attachment, signature: bytes):
+    def __load_signature(attachment):
         try:
             match len(attachment.payload):
                 case 0:
@@ -183,18 +192,20 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
                 case _:
                     signature = bytes(attachment.payload)
         except ValueError:
-            return False
-        return True
+            return bytes()
+        return signature
 
     @staticmethod
     def __verify_signature(signature, public_key, message):
-        try:
-            public_key.verify(self=public_key,
-                              signature=signature,
-                              data=str.encode(message),
-                              padding=padding.PSS(mgf=padding.MGF1(hashes.SHA256()), salt_length=padding.PSS.MAX_LENGTH),
-                              algorithm=hashes.SHA256())
-        except (cryptography.exceptions.InvalidSignature, cryptography.exceptions.UnsupportedAlgorithm, ValueError):
+        if signature and public_key:
+            try:
+                public_key.verify(signature=signature,
+                                  data=message,
+                                  padding=padding.PSS(mgf=padding.MGF1(hashes.SHA256()), salt_length=padding.PSS.MAX_LENGTH),
+                                  algorithm=hashes.SHA256())
+            except (cryptography.exceptions.InvalidSignature, cryptography.exceptions.UnsupportedAlgorithm, ValueError):
+                return False
+        else:
             return False
         return True
 
